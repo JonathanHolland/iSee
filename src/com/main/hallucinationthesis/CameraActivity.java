@@ -1,5 +1,7 @@
 package com.main.hallucinationthesis;
 
+import java.io.File;
+
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.JavaCameraView;
@@ -10,6 +12,9 @@ import org.opencv.core.Mat;
 
 import android.app.Activity;
 import android.content.Context;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
@@ -24,11 +29,9 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
 	private static final String  	TAG = "HallucinationThesis::CameraActivity";
 	private static Context 			cContext;
     private CameraBridgeViewBase 	cOpenCvCameraView;
-    private CameraProcessor	 	    cProcess;
+    private HallucinationProcessor	hProcess;
     private MenuItem             	cImageProcessOn;
     private MenuItem             	cImageProcessOff;
-    private int 					cImgWidth;
-    private int 					cImgHeight;
     private Mat						cRgba;
     
     // Provide a callback function to initiate openCV on application load
@@ -64,8 +67,20 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
         setContentView(cOpenCvCameraView);
         cOpenCvCameraView.setCvCameraViewListener(this);
         
-        cProcess = new CameraProcessor();
-        cProcess.setContext(cContext);
+        PackageManager m = getPackageManager();
+        String s = getPackageName();
+        PackageInfo p = null;
+		try {
+			p = m.getPackageInfo(s, 0);
+		} catch (NameNotFoundException e) {
+			e.printStackTrace();
+		}
+        s = p.applicationInfo.dataDir;
+        
+        File path = new File(s);
+        
+        hProcess = new HallucinationProcessor(path);
+        hProcess.setContext(cContext);
     }
     
 	// Default pause function, disables the view, stops processes running
@@ -103,9 +118,9 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
     public boolean onOptionsItemSelected(MenuItem item) {
         Log.i(TAG, "Menu Item selected " + item);
         if (item == cImageProcessOn) {
-            cProcess.enableProcessing();
+            hProcess.enableProcessing();
         } else if (item == cImageProcessOff) {
-            cProcess.disableProcessing();
+            hProcess.disableProcessing();
         }
         return true;
     }
@@ -117,33 +132,13 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
     
     @Override
 	public boolean onTouchEvent(MotionEvent event) {
-    	Log.i(TAG, "Touch Point Hit onTouchEvent");
-    	
-    	int cols = cRgba.cols();
-        int rows = cRgba.rows();
-
-        int xOffset = (cOpenCvCameraView.getWidth() - cols) / 2;
-        int yOffset = (cOpenCvCameraView.getHeight() - rows) / 2;
-
-        int x = (int)event.getX() - xOffset;
-        int y = (int)event.getY() - yOffset;
-
-        // If within the bounds
-        if (x >=55 && x <= cImgWidth-55 && y >=97  && y <= cImgHeight-97) {
-            cProcess.touchArea(x, y);
-            Log.i(TAG, "Touch Point recorded");
-        }
-        
+    	hProcess.touchEvent();
         return true;
 	}
     
     public void onCameraViewStarted(int width, int height) {
-        cImgWidth = width;
-        cImgHeight = height;
-        
         // Get and thus set a supported image capture size
-
-        cProcess.setFrameSize(width, height);
+        hProcess.setFrameSize(width, height);
     }
 
     public void onCameraViewStopped() {
@@ -151,7 +146,7 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
 
 
     public Mat onCameraFrame(Mat inputFrame) {
-    	cRgba = cProcess.processImage(inputFrame);
+    	cRgba = hProcess.hallucinate(inputFrame,4);
         return cRgba;
     }
 	
