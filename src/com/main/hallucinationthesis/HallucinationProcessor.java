@@ -1,5 +1,6 @@
 package com.main.hallucinationthesis;
 
+import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.Point;
@@ -13,8 +14,11 @@ import android.util.Log;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 
 /**
  * The main class to perform the processing required for "Hallucination"
@@ -26,6 +30,9 @@ import java.util.Map;
  * 
  */
 public class HallucinationProcessor {
+	
+	private static final int CV_RGB2GRAY = 7;
+	private static final int CV_16S = 3;
 	
 	private static Context hContext;
 	
@@ -70,7 +77,6 @@ public class HallucinationProcessor {
 		
 		List<Mat> result = new ArrayList<Mat>();
 		
-		this.hRImages = readInImages(path, result);
 		this.library = deconstructLibrary();	
 	}
 
@@ -161,36 +167,151 @@ public class HallucinationProcessor {
 	 * @return
 	 */
 	private Map<String, List<ParentStructure>> deconstructLibrary() {
+		
+		int scale = 1;
+		int delta = 0;
+		int ddepth = CV_16S;
+		Map<String, List<ParentStructure>> library = new HashMap<String, List<ParentStructure>>();
+		
 		// Take all the images from the svg image library of text
-		// for each image I, form the guassian pyramid G0(I) -> GN(I)
-		// and then laplacian pyramid L(I)
-		// form the first and second horizontal and vertical derivatives H1,H2,V1,V2 of the gaussian G(I)
+		Map<String, Mat> storedImages = new HashMap<String,Mat>();
+		storedImages = this.readInImages(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), storedImages);
 		
-		// Thus for each pixel, we have five stored values
-		// the laplacian, and the four derivatives of the gaussian
+		// for each image I, form the Gaussian pyramid G0(I) -> GN(I)
+		// and the Laplacian pyramid L(I)
+		Iterator<Entry<String, Mat>> it = storedImages.entrySet().iterator();
+		while(it.hasNext()) {
+			Map.Entry pair = (Map.Entry)it.next();
+			String imageName = (String) pair.getKey();
+			Mat current = (Mat) pair.getValue();
+			
+			List<ParentStructure> currentStructures = new ArrayList<ParentStructure>();
+			List<Mat> gaussianPyramid = new ArrayList<Mat>();
+			List<Mat> laplacianPyramid = new ArrayList<Mat>();
+			List<Mat> hFirstDerivativePyramid = new ArrayList<Mat>();
+			List<Mat> vFirstDerivativePyramid = new ArrayList<Mat>();
+			List<Mat> hSecondDerivativePyramid = new ArrayList<Mat>();
+			List<Mat> vSecondDerivativePyramid = new ArrayList<Mat>();
+			
+			gaussianPyramid = getGaussianPyramid(current, 3);
+			
+			// Each downsized image is then added
+			for(int i=0; i < 3; i++) {
+				Mat currentGray = null, currentBlur = null, grad_x = null, 
+						grad_y = null, grad2_x = null, grad2_y = null;
+				
+				Mat gaussian = gaussianPyramid.get(i);
+				
+				// The laplacian calculated from the gaussian
+				laplacianPyramid.add(getLaplacian(gaussian,i));
+				
+				// Apply a gaussian blur before computing the horizontal and vertical derivatives
+				// using either Scharr or Sobel (preferably Scharr)
+				Imgproc.GaussianBlur(current, currentBlur, new Size(3,3), 0, 0, Imgproc.BORDER_DEFAULT);
+				Imgproc.cvtColor(currentBlur, currentGray, CV_RGB2GRAY);
+				/// Gradient X
+				Imgproc.Sobel(currentGray, grad_x, ddepth, 1, 0, 3, scale, delta, Imgproc.BORDER_DEFAULT);
+				Imgproc.Sobel(grad_x, grad2_x, ddepth, 1, 0, 3, scale, delta, Imgproc.BORDER_DEFAULT);
+				/// Gradient Y
+				Imgproc.Sobel(currentGray, grad_y, ddepth, 0, 1, 3, scale, delta, Imgproc.BORDER_DEFAULT);
+				Imgproc.Sobel(grad_y, grad2_y, ddepth, 0, 1, 3, scale, delta, Imgproc.BORDER_DEFAULT);
+				
+				Core.convertScaleAbs( grad_x, grad_x);
+				Core.convertScaleAbs( grad2_x, grad2_x);
+				Core.convertScaleAbs( grad_y, grad_y);
+				Core.convertScaleAbs( grad2_y, grad2_y);
+
+				// form the first and second horizontal and vertical derivatives H1,H2,V1,V2 of the gaussian G(I)
+				hFirstDerivativePyramid.add(grad_x);
+				vFirstDerivativePyramid.add(grad_y);
+				hSecondDerivativePyramid.add(grad2_x);
+				vSecondDerivativePyramid.add(grad2_y);
+			}
+			
+			// Finally, convert all of this data into usable Parent Structures
+			
+			// For all height levels
+			for(int level = 0; level < 3; level++) {
+				// Use the gaussian as a position reference for each height level in the pyramid
+				Mat gCurrent = gaussianPyramid.get(level);
+				for(int k = 0; k < gCurrent.rows(); k++) {
+					for(int l = 0; l < gCurrent.cols(); l++) {
+						
+						List<Double> currentFivePoints = extractPoints(laplacianPyramid,hFirstDerivativePyramid,
+								hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(k,l), level);
+						List<Double> parentFivePoints = extractParentPoints(laplacianPyramid,hFirstDerivativePyramid,
+								hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(k,l), level);
+						Double[] weightings = new Double[5];
+						
+						ParentStructure ps = new ParentStructure(currentFivePoints, parentFivePoints, weightings, level, new Point(k,l));
+						currentStructures.add(ps);
+					}
+				}
+			}
+			
+			library.put(imageName, currentStructures);
+			it.remove();
+		}
 		
-		// Then we have the Parent Structure vector PSl(m,n) of a pixel (m,n) where
-		// it consists of the vector for the pixel and the vectors for each parent in the l+1... n
-		// from layer L to N
-		
-		// Recognition involves matching this PSl(m,n)
-		
-		// equations 25 from the paper
-		// PSl(I)(m,n) = (Fl(I)(m,n), Fl+1(I)([m/2],[n/2])......... FN(I)([m/(2^(N-1))],[n/(2^(N-1))]
-		// I.e. the parent structure of pixel (m,n) in the level l of the pyramid is the feature of that level
-		// and every level above it at the same point (registered by halving the pixel co-ordinates each time)
-		
-		
-		// TODO Auto-generated method stub
+
+	
+
 		return null;
 	}
 	
+	private List<Double> extractParentPoints(List<Mat> laplacianPyramid,
+			List<Mat> hFirstDerivativePyramid,
+			List<Mat> hSecondDerivativePyramid,
+			List<Mat> vFirstDerivativePyramid,
+			List<Mat> vSecondDerivativePyramid, Point point, int level) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	private List<Double> extractPoints(List<Mat> laplacianPyramid,
+			List<Mat> hFirstDerivativePyramid,
+			List<Mat> hSecondDerivativePyramid,
+			List<Mat> vFirstDerivativePyramid,
+			List<Mat> vSecondDerivativePyramid, Point point, int level) {
+		// TODO Auto-generated method stub
+		return null;
+	}
+
+	private List<Mat> getGaussianPyramid(Mat current, int height) {
+		List<Mat> gaussianPyramid = new ArrayList<Mat>();
+		for(int j=0; j < height; j++) {
+			Imgproc.pyrDown(current, current);
+			gaussianPyramid.add(current);
+		}
+		return gaussianPyramid;
+	}
+
+	/**
+	 * A function to find the laplacian pyramid element at layer l
+	 * 
+	 * @return 
+	 */
+	private Mat getLaplacian(Mat img, int l) {
+	    Mat currImg = img;
+	    int i = 0;
+	    Mat lap = null;
+	    
+	    while(i < l) {
+	        Mat down = null, up = null;
+	    	Imgproc.pyrDown(currImg, down);
+	        Imgproc.pyrUp(down,up);
+	        Core.subtract(currImg,up,lap);
+	        currImg = down;
+	        i++;
+	    }
+	    return lap;
+	}	
 	/**
 	 * A function to simply read in the high-res images as mats and store them
 	 * 
 	 * @return
 	 */
-	private List<Mat> readInImages(File directory, List<Mat> result) {
+	private Map<String, Mat> readInImages(File directory, Map<String,Mat> result) {
 		
 		if(directory.exists()) {
 			File[] images = directory.listFiles();
@@ -200,7 +321,7 @@ public class HallucinationProcessor {
 				if(image.isDirectory()) {
 					readInImages(image,result);
 				} else {
-					result.add(Highgui.imread(image.getAbsolutePath()));
+					result.put(image.getName(),Highgui.imread(image.getAbsolutePath()));
 				}
 			}
 		}
