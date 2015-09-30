@@ -15,10 +15,11 @@ import org.opencv.core.Point;
 public class ParentStructure {
 	
 	// The five values for THIS level of the pyramid
-	private List<Double> currentValues;
+	// Note that the values are double arrays (allowing for grayscale OR colour)
+	private List<double[]> currentValues;
 	
 	// A list of vectors of 5 doubles to represent the parent values of THIS level of the pyramid
-	private List<Double> parentValues;
+	private List<double[]> parentValues;
 	
 	// The overall weightedScore of the PS
 	// used as the matching point between images
@@ -47,7 +48,7 @@ public class ParentStructure {
 	 * @throws NullPointerException
 	 *             	if any inputs are null
 	 */
-	public ParentStructure(List<Double> current, List<Double> values, Double[] weightings,
+	public ParentStructure(List<double[]> current, List<double[]> values, Double[] weightings,
 							int height, Point position) {
 		if(values==null||values.contains(null)||weightings==null) {
 			throw new NullPointerException("Inputs cannot be null");
@@ -73,11 +74,11 @@ public class ParentStructure {
 		this.weightedScore = weightedScore;
 	}
 
-	public List<Double> getParentValues() {
+	public List<double[]> getParentValues() {
 		return parentValues;
 	}
 
-	public void setParentValues(List<Double> values) {
+	public void setParentValues(List<double[]> values) {
 		this.parentValues = values;
 	}
 
@@ -105,11 +106,11 @@ public class ParentStructure {
 		this.weightings = weightings;
 	}
 
-	public List<Double> getCurrentValues() {
+	public List<double[]> getCurrentValues() {
 		return currentValues;
 	}
 
-	public void setCurrentValues(List<Double> currentValues) {
+	public void setCurrentValues(List<double[]> currentValues) {
 		this.currentValues = currentValues;
 	}
 }
