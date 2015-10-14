@@ -1,5 +1,6 @@
 package com.main.hallucinationthesis;
 
+import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
@@ -14,6 +15,7 @@ import android.util.Log;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -37,12 +39,14 @@ public class HallucinationProcessor {
 	private static Context hContext;
 	
 	private boolean 	hProcessingEnabled;
+	private Point 		hTouch;
 	private boolean 	hOnTouch;
 	private int			hFrameSizeWidth;
 	private int 		hFrameSizeHeight;
 	
 	private Map<String, List<ParentStructure>> library;
 	private Map<String, Mat> originalHrImages;
+
 	
 	// Set flag to enable processing
 	public void enableProcessing() {
@@ -74,9 +78,7 @@ public class HallucinationProcessor {
 		if(path==null||path.length()==0) {
 			throw new NullPointerException("Path cannot be null or empty");
 		}
-		
-		List<Mat> result = new ArrayList<Mat>();
-		
+		this.originalHrImages = new HashMap<String, Mat>();
 		this.library = deconstructLibrary();	
 	}
 
@@ -87,15 +89,20 @@ public class HallucinationProcessor {
 	 */
 	public Mat hallucinate(Mat input, int scale) {
 		if(this.hProcessingEnabled && this.hOnTouch) {
+			this.hOnTouch =  false;
+			
+			// Because of memory constraints, limit the image to a submat within the center
+			Mat inputFrame = input.submat((int)hTouch.x - (96/2), (int)hTouch.x + (96/2), (int)hTouch.y - (128/2), (int)hTouch.y + (128/2));
+			
 			// before hallucinating, apply a lanczos filter to the image to blow it up
-			Mat lanczosInput = lanczos(input,scale);
+			Mat lanczosInput = lanczos(inputFrame,scale);
 			// Make the final image as the same size of the lanzcos'd input
 			Mat finalImage = new Mat(lanczosInput.height(),lanczosInput.width(), CvType.CV_8UC4); // or same type as well?
 			
 			Double threshold = Double.MAX_VALUE;
 			
 			// Deconstruct the given LR image into its parent structures
-			List<ParentStructure> inputParentStructures = deconstructImage(input);
+			List<ParentStructure> inputParentStructures = deconstructImage(lanczosInput);
 			
 			// For each ps in the low-res image
 			for(int i=0; i < inputParentStructures.size(); i++) {
@@ -127,9 +134,7 @@ public class HallucinationProcessor {
 			}
 			
 			return finalImage;
-			
 		} else {
-			
 			return input;
 		}
 	}
@@ -142,6 +147,8 @@ public class HallucinationProcessor {
 		
 	    Imgproc.resize(input, output, outputSize,2,2,3);
 	    
+	    input.release();
+	    
 		return output;
 	}
 
@@ -153,6 +160,7 @@ public class HallucinationProcessor {
 	 */
 	private List<ParentStructure> deconstructImage(Mat input) {
 		
+		Log.i("Image size: ", input.size().toString());
 		int scale = 1;
 		int delta = 0;
 		int ddepth = CV_16S;
@@ -169,24 +177,34 @@ public class HallucinationProcessor {
 		
 		// Each downsized image is then added
 		for(int i=0; i < 3; i++) {
-			Mat currentGray = null, currentBlur = null, grad_x = null, 
-					grad_y = null, grad2_x = null, grad2_y = null;
+			// Instantialise all of the variables
+			Mat currentGray = new Mat(); 
+			Mat currentBlur = new Mat();
+			Mat grad_x = new Mat();
+			Mat grad_y = new Mat();
+			Mat grad2_x = new Mat();
+			Mat grad2_y = new Mat();
 			
-			Mat gaussian = gaussianPyramid.get(i);
+			Mat gaussian = gaussianPyramid.get(i).clone();
+			Log.i("level", String.valueOf(i));
+			Log.i("gaussian", gaussianPyramid.get(i).toString());
 			
 			// The laplacian calculated from the gaussian
-			laplacianPyramid.add(getLaplacian(gaussian,i));
+			laplacianPyramid.add(getLaplacian(gaussian.clone(),i));
 			
 			// Apply a gaussian blur before computing the horizontal and vertical derivatives
 			// using either Scharr or Sobel (preferably Scharr)
-			Imgproc.GaussianBlur(input, currentBlur, new Size(3,3), 0, 0, Imgproc.BORDER_DEFAULT);
+			Imgproc.GaussianBlur(gaussian, currentBlur, new Size(3,3), 0, 0, Imgproc.BORDER_DEFAULT);
+			gaussian.release();
 			Imgproc.cvtColor(currentBlur, currentGray, CV_RGB2GRAY);
+			currentBlur.release();
 			/// Gradient X
 			Imgproc.Sobel(currentGray, grad_x, ddepth, 1, 0, 3, scale, delta, Imgproc.BORDER_DEFAULT);
 			Imgproc.Sobel(grad_x, grad2_x, ddepth, 1, 0, 3, scale, delta, Imgproc.BORDER_DEFAULT);
 			/// Gradient Y
 			Imgproc.Sobel(currentGray, grad_y, ddepth, 0, 1, 3, scale, delta, Imgproc.BORDER_DEFAULT);
 			Imgproc.Sobel(grad_y, grad2_y, ddepth, 0, 1, 3, scale, delta, Imgproc.BORDER_DEFAULT);
+			currentGray.release();
 			
 			Core.convertScaleAbs( grad_x, grad_x);
 			Core.convertScaleAbs( grad2_x, grad2_x);
@@ -194,30 +212,44 @@ public class HallucinationProcessor {
 			Core.convertScaleAbs( grad2_y, grad2_y);
 
 			// form the first and second horizontal and vertical derivatives H1,H2,V1,V2 of the gaussian G(I)
-			hFirstDerivativePyramid.add(grad_x);
-			vFirstDerivativePyramid.add(grad_y);
-			hSecondDerivativePyramid.add(grad2_x);
-			vSecondDerivativePyramid.add(grad2_y);
+			hFirstDerivativePyramid.add(grad_x.clone());
+			grad_x.release();
+			vFirstDerivativePyramid.add(grad_y.clone());
+			grad_y.release();
+			hSecondDerivativePyramid.add(grad2_x.clone());
+			grad2_x.release();
+			vSecondDerivativePyramid.add(grad2_y.clone());
+			grad2_y.release();
+			
+			// Call the garbage collector manually
+			System.gc();
 		}
 		
 		// Finally, convert all of this data into usable Parent Structures
 		
+		// Give the derivatives half as much weight as per bakerSimon2002
+		Double[] weightings = {1.0,0.5,0.5,0.25,0.25};
+		
 		// For all height levels
-		for(int level = 0; level < 3; level++) {
+		for(int level = 0; level < 4; level++) {
 			// Use the gaussian as a position reference for each height level in the pyramid
-			Mat gCurrent = gaussianPyramid.get(level);
+			Mat gCurrent = gaussianPyramid.get(level).clone();
 			for(int k = 0; k < gCurrent.rows(); k++) {
 				for(int l = 0; l < gCurrent.cols(); l++) {
 					
 					List<double[]> currentFivePoints = extractPoints(laplacianPyramid,hFirstDerivativePyramid,
-							hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(k,l), level);
+							hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(l,k), level);
 					List<double[]> parentFivePoints = extractPoints(laplacianPyramid,hFirstDerivativePyramid,
-							hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(k,l), level+1);
-					Double[] weightings = new Double[5];
+							hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(Math.floor(l/2),Math.floor(k/2)), level+1);
 					
-					ParentStructure ps = new ParentStructure(currentFivePoints, parentFivePoints, weightings, level, new Point(k,l));
+					Log.i("row",String.valueOf(k));
+					Log.i("column",String.valueOf(l));
+					ParentStructure ps = new ParentStructure(currentFivePoints, parentFivePoints, weightings, level, new Point(l,k));
 					currentStructures.add(ps);
 				}
+				
+				// Call the garbage collector manually
+				System.gc();
 			}
 		}
 		return currentStructures;
@@ -232,22 +264,25 @@ public class HallucinationProcessor {
 	 */
 	private Map<String, List<ParentStructure>> deconstructLibrary() {
 		
-		int scale = 1;
-		int delta = 0;
-		int ddepth = CV_16S;
 		Map<String, List<ParentStructure>> library = new HashMap<String, List<ParentStructure>>();
 		
 		// Take all the images from the svg image library of text
 		Map<String, Mat> storedImages = new HashMap<String,Mat>();
-		storedImages = this.readInImages(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), storedImages);
-		this.originalHrImages.putAll(storedImages);
 		
+		Log.d("Path", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).getAbsolutePath());
+		storedImages = this.readInImages(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), storedImages);
+		
+		if(storedImages != null) {
+			this.originalHrImages.putAll(storedImages);
+		} else {
+			return library;
+		}
 		
 		// for each image I, form the Gaussian pyramid G0(I) -> GN(I)
 		// and the Laplacian pyramid L(I)
 		Iterator<Entry<String, Mat>> it = storedImages.entrySet().iterator();
 		while(it.hasNext()) {
-			Map.Entry pair = (Map.Entry)it.next();
+			Entry<String, Mat> pair = it.next();
 			String imageName = (String) pair.getKey();
 			Mat current = (Mat) pair.getValue();
 			
@@ -256,6 +291,9 @@ public class HallucinationProcessor {
 			library.put(imageName, currentStructures);
 			it.remove();
 		}
+		
+		// Call the garbage collector manually
+		System.gc();
 		
 		return library;
 	}
@@ -287,15 +325,20 @@ public class HallucinationProcessor {
 		parentPoints.add(vFirstDerivativePyramid.get(level).get((int)point.y,(int)point.x));
 		parentPoints.add(vSecondDerivativePyramid.get(level).get((int)point.y,(int)point.x));
 		
-		
 		return parentPoints;
 	}
 
 	private List<Mat> getGaussianPyramid(Mat current, int height) {
 		List<Mat> gaussianPyramid = new ArrayList<Mat>();
-		for(int j=0; j < height; j++) {
-			Imgproc.pyrDown(current, current);
-			gaussianPyramid.add(current);
+		gaussianPyramid.add(current);
+		if(!current.empty()) {
+			Mat dst = new Mat();
+			for(int j=0; j < height; j++) {
+				Imgproc.pyrDown(current, dst, new Size( current.cols()/2, current.rows()/2 ));
+				Log.i("pyrDowned image", dst.toString());
+				gaussianPyramid.add(dst.clone());
+				current = dst.clone();
+			}
 		}
 		return gaussianPyramid;
 	}
@@ -306,18 +349,28 @@ public class HallucinationProcessor {
 	 * @return 
 	 */
 	private Mat getLaplacian(Mat img, int l) {
-	    Mat currImg = img;
-	    int i = 0;
-	    Mat lap = null;
+	    if(img.empty()||img==null) {
+	    	Log.d("getLaplacian Error","Empty input @img");
+	    }
 	    
-	    while(i < l) {
-	        Mat down = null, up = null;
+		Mat currImg = img.clone();
+		img.release();
+		
+	    int i = 0;
+	    Mat lap = new Mat();
+	    
+	    while(i < l+1) {
+	        Mat down = new Mat(), up = new Mat();
 	    	Imgproc.pyrDown(currImg, down);
 	        Imgproc.pyrUp(down,up);
 	        Core.subtract(currImg,up,lap);
-	        currImg = down;
+	        currImg = down.clone();
+	        down.release();
+	        up.release();
 	        i++;
 	    }
+	    
+	    currImg.release();
 	    return lap;
 	}	
 	/**
@@ -334,8 +387,14 @@ public class HallucinationProcessor {
 				File image = images[i];
 				if(image.isDirectory()) {
 					readInImages(image,result);
-				} else {
-					result.put(image.getName(),Highgui.imread(image.getAbsolutePath()));
+				} else{
+					if(image.getAbsolutePath().contains("svg")) {
+						Mat readImage = Highgui.imread(image.getAbsolutePath());
+						if((!readImage.empty())&&(readImage!=null)) {
+							result.put(image.getName(),Highgui.imread(image.getAbsolutePath()));
+						}
+						readImage.release();
+					}
 				}
 			}
 		}
@@ -346,7 +405,8 @@ public class HallucinationProcessor {
 		hContext = context;
 	}
 
-	public void touchEvent() {
+	public void touchEvent(int x, int y) {
+		this.hTouch = new Point(x,y);
 		this.hOnTouch = true;
 	}
 }
