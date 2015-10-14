@@ -58,6 +58,9 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (!OpenCVLoader.initDebug()) {
+        	Log.i(TAG, "OpenCV failed to initialise");
+        }
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         Log.d(TAG, "Creating and setting view");
@@ -132,7 +135,16 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
     
     @Override
 	public boolean onTouchEvent(MotionEvent event) {
-    	hProcess.touchEvent();
+    	
+    	int cols = cRgba.cols();
+        int rows = cRgba.rows();
+
+        int xOffset = (cOpenCvCameraView.getWidth() - cols) / 2;
+        int yOffset = (cOpenCvCameraView.getHeight() - rows) / 2;
+    	
+        int x = (int)event.getX() - xOffset;
+        int y = (int)event.getY() - yOffset;
+    	hProcess.touchEvent(x,y);
         return true;
 	}
     
@@ -146,7 +158,7 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
 
 
     public Mat onCameraFrame(Mat inputFrame) {
-    	cRgba = hProcess.hallucinate(inputFrame,4);
+    	cRgba = hProcess.hallucinate(inputFrame,2);
         return cRgba;
     }
 	
