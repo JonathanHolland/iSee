@@ -1,8 +1,12 @@
 package com.main.hallucinationthesis;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.opencv.core.Point;
+
+import android.util.Log;
 
 /**
  * A class to represent the PS/parent structure of a point
@@ -50,20 +54,35 @@ public class ParentStructure {
 	 */
 	public ParentStructure(List<double[]> current, List<double[]> values, Double[] weightings,
 							int height, Point position) {
-		if(values==null||values.contains(null)||weightings==null) {
+		if(values==null||current==null||weightings==null||current.contains(null)) {
 			throw new NullPointerException("Inputs cannot be null");
 		}
-		this.setCurrentValues(current);
-		this.parentValues = values;
+		
+		this.currentValues = current;
+		if(values.contains(null)) {
+			this.parentValues = new ArrayList<double[]>();
+		} else {
+			this.parentValues = values;
+		}
+
 		this.pyramidHeight = height;
 		this.pixelPosition = position;
-		this.setWeightings(weightings);
+		this.weightings = weightings;
 		this.weightedScore = calculateWeightedScore();
+		
+		System.gc();
 	}
 	
+	// Use a weighted L^2 norm
+	// Note that the CV8UC4 nature of the laplacian pyramid values
+	// requires 4 values for this.currentValues.get(0)
+	// All of the others are a single value
 	private Double calculateWeightedScore() {
-		//TODO
-		return null;
+		return this.weightings[0]*(1/(2^this.pyramidHeight))*(this.currentValues.get(0)[0] + this.currentValues.get(0)[1] + this.currentValues.get(0)[2] + this.currentValues.get(0)[3])
+				+ this.weightings[1]*(1/(2^this.pyramidHeight))*(this.currentValues.get(1)[0])
+				+ this.weightings[2]*(1/(2^this.pyramidHeight))*(this.currentValues.get(2)[0])
+				+ this.weightings[3]*(1/(2^this.pyramidHeight))*(this.currentValues.get(3)[0])
+				+ this.weightings[4]*(1/(2^this.pyramidHeight))*(this.currentValues.get(4)[0]);
 	}
 
 	public Double getWeightedScore() {
