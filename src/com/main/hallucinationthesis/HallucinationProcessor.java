@@ -97,7 +97,7 @@ public class HallucinationProcessor {
 			// before hallucinating, apply a lanczos filter to the image to blow it up
 			Mat lanczosInput = lanczos(inputFrame,scale);
 			// Make the final image as the same size of the lanzcos'd input
-			Mat finalImage = new Mat(lanczosInput.height(),lanczosInput.width(), CvType.CV_8UC4); // or same type as well?
+			Mat finalImage = new Mat(lanczosInput.height(),lanczosInput.width(), CvType.CV_8UC3); // or same type as well?
 			
 			Double threshold = Double.MAX_VALUE;
 			
