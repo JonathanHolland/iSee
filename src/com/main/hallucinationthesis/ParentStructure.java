@@ -59,7 +59,7 @@ public class ParentStructure {
 		}
 		
 		this.currentValues = current;
-		if(values.contains(null)) {
+		if(values.contains(null)||values.size()==0) {
 			this.parentValues = new ArrayList<double[]>();
 		} else {
 			this.parentValues = values;
@@ -78,11 +78,11 @@ public class ParentStructure {
 	// requires 4 values for this.currentValues.get(0)
 	// All of the others are a single value
 	private Double calculateWeightedScore() {
-		return this.weightings[0]*(1/(2^this.pyramidHeight))*(this.currentValues.get(0)[0] + this.currentValues.get(0)[1] + this.currentValues.get(0)[2] + this.currentValues.get(0)[3])
-				+ this.weightings[1]*(1/(2^this.pyramidHeight))*(this.currentValues.get(1)[0])
-				+ this.weightings[2]*(1/(2^this.pyramidHeight))*(this.currentValues.get(2)[0])
-				+ this.weightings[3]*(1/(2^this.pyramidHeight))*(this.currentValues.get(3)[0])
-				+ this.weightings[4]*(1/(2^this.pyramidHeight))*(this.currentValues.get(4)[0]);
+		return this.weightings[0]*(1/(Math.pow(2, this.pyramidHeight)))*(this.currentValues.get(0)[0] + this.currentValues.get(0)[1] + this.currentValues.get(0)[2])// + this.currentValues.get(0)[3])
+				+ this.weightings[1]*(1/(Math.pow(2, this.pyramidHeight)))*(this.currentValues.get(1)[0])
+				+ this.weightings[2]*(1/(Math.pow(2, this.pyramidHeight)))*(this.currentValues.get(2)[0])
+				+ this.weightings[3]*(1/(Math.pow(2, this.pyramidHeight)))*(this.currentValues.get(3)[0])
+				+ this.weightings[4]*(1/(Math.pow(2, this.pyramidHeight)))*(this.currentValues.get(4)[0]);
 	}
 
 	public Double getWeightedScore() {
