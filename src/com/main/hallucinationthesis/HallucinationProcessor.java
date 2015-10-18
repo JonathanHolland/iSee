@@ -133,18 +133,34 @@ public class HallucinationProcessor {
 				
 			}
 			
-			return finalImage;
+
+			this.saveImage(finalImage, "test");
+			
+			return input;
+			
 		} else {
 			return input;
 		}
 	}
 	
+	private void saveImage(Mat img, String filename) {
+		Log.i("saveImage", filename);
+		Mat intermediateMat = new Mat();
+	    Imgproc.cvtColor(img, intermediateMat, Imgproc.COLOR_RGBA2BGR, 3);
+	    
+	    File path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+	   
+	    filename = filename + ".png";
+	    File file = new File(path, filename);
+	    filename = file.toString();
+ 
+	    Highgui.imwrite(filename, intermediateMat);
+	}
+
 	private Mat lanczos(Mat input, int scale) {
 		
 		Mat output = new Mat(input.height()*scale, input.width()*scale, CvType.CV_8UC4);
-		
 		Size outputSize = new Size(input.width()*scale,input.height()*scale);
-		
 	    Imgproc.resize(input, output, outputSize,2,2,3);
 	    
 	    input.release();
