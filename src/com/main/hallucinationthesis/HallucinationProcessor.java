@@ -202,11 +202,9 @@ public class HallucinationProcessor {
 			Mat grad2_y = new Mat();
 			
 			Mat gaussian = gaussianPyramid.get(i).clone();
-			Log.i("level", String.valueOf(i));
-			Log.i("gaussian", gaussianPyramid.get(i).toString());
 			
 			// The laplacian calculated from the gaussian
-			laplacianPyramid.add(getLaplacian(gaussian.clone(),i));
+			laplacianPyramid.add(getLaplacian(gaussianPyramid.get(0).clone(),i));
 			
 			// Apply a gaussian blur before computing the horizontal and vertical derivatives
 			// using either Scharr or Sobel (preferably Scharr)
@@ -287,12 +285,13 @@ public class HallucinationProcessor {
 		// Take all the images from the svg image library of text
 		Map<String, Mat> storedImages = new HashMap<String,Mat>();
 		
-		Log.d("Path", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).getAbsolutePath());
+		Log.i("Path", Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES).getAbsolutePath());
 		storedImages = this.readInImages(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES), storedImages);
 		
 		if(storedImages != null) {
 			this.originalHrImages.putAll(storedImages);
 		} else {
+			Log.i("deconstructLibrary", "No images found in library location");
 			return library;
 		}
 		
@@ -353,7 +352,6 @@ public class HallucinationProcessor {
 			Mat dst = new Mat();
 			for(int j=0; j < height; j++) {
 				Imgproc.pyrDown(current, dst, new Size( current.cols()/2, current.rows()/2 ));
-				Log.i("pyrDowned image", dst.toString());
 				gaussianPyramid.add(dst.clone());
 				current = dst.clone();
 			}
@@ -368,19 +366,39 @@ public class HallucinationProcessor {
 	 */
 	private Mat getLaplacian(Mat img, int l) {
 	    if(img.empty()||img==null) {
-	    	Log.d("getLaplacian Error","Empty input @img");
+	    	Log.i("getLaplacian Error","Empty input @img");
 	    }
 	    
 		Mat currImg = img.clone();
-		img.release();
+	    if(l==0) {
+	    	return img;
+	    } else {
+	    	img.release();
+	    }
 		
 	    int i = 0;
+
 	    Mat lap = new Mat();
 	    
-	    while(i < l+1) {
+	    while(i < l) {
 	        Mat down = new Mat(), up = new Mat();
-	    	Imgproc.pyrDown(currImg, down);
-	        Imgproc.pyrUp(down,up);
+	        
+	        if(currImg.cols()%2!=0) {
+	        	if(currImg.rows()%2!=0) {
+	        		Imgproc.pyrDown(currImg, down, new Size( currImg.cols()/2, currImg.rows()/2 ));
+			        Imgproc.pyrUp(down,up, new Size( (down.cols()*2+1), (down.rows()*2+1)));
+		        } else {
+		        	Imgproc.pyrDown(currImg, down, new Size( currImg.cols()/2, currImg.rows()/2 ));
+		        	Imgproc.pyrUp(down,up, new Size( (down.cols()*2+1), down.rows()*2));
+		        }
+	        } else if(currImg.rows()%2!=0) {
+	        	Imgproc.pyrDown(currImg, down, new Size( currImg.cols()/2, currImg.rows()/2 ));
+	        	Imgproc.pyrUp(down,up, new Size( down.cols()*2, (down.rows()*2+1)));
+	        } else {
+	        	Imgproc.pyrDown(currImg, down, new Size( currImg.cols()/2, currImg.rows()/2 ));
+		        Imgproc.pyrUp(down,up, new Size( down.cols()*2, down.rows()*2 ));
+	        }
+
 	        Core.subtract(currImg,up,lap);
 	        currImg = down.clone();
 	        down.release();
@@ -410,6 +428,7 @@ public class HallucinationProcessor {
 						Mat readImage = Highgui.imread(image.getAbsolutePath());
 						if((!readImage.empty())&&(readImage!=null)) {
 							result.put(image.getName(),Highgui.imread(image.getAbsolutePath()));
+							Log.i("readInImages", "Added image: " + image.getAbsolutePath());
 						}
 						readImage.release();
 					}
