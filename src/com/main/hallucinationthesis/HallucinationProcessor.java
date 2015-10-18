@@ -192,7 +192,7 @@ public class HallucinationProcessor {
 		gaussianPyramid = getGaussianPyramid(input, 3);
 		
 		// Each downsized image is then added
-		for(int i=0; i < 3; i++) {
+		for(int i=0; i < 4; i++) {
 			// Instantialise all of the variables
 			Mat currentGray = new Mat(); 
 			Mat currentBlur = new Mat();
@@ -253,13 +253,15 @@ public class HallucinationProcessor {
 			for(int k = 0; k < gCurrent.rows(); k++) {
 				for(int l = 0; l < gCurrent.cols(); l++) {
 					
+					List<double[]> parentFivePoints;
 					List<double[]> currentFivePoints = extractPoints(laplacianPyramid,hFirstDerivativePyramid,
 							hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(l,k), level);
-					List<double[]> parentFivePoints = extractPoints(laplacianPyramid,hFirstDerivativePyramid,
+					if(level==3) {
+						parentFivePoints = new ArrayList<double[]>();
+					} else {
+						parentFivePoints = extractPoints(laplacianPyramid,hFirstDerivativePyramid,
 							hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(Math.floor(l/2),Math.floor(k/2)), level+1);
-					
-					Log.i("row",String.valueOf(k));
-					Log.i("column",String.valueOf(l));
+					}
 					ParentStructure ps = new ParentStructure(currentFivePoints, parentFivePoints, weightings, level, new Point(l,k));
 					currentStructures.add(ps);
 				}
