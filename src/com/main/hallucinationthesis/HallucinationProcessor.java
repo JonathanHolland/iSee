@@ -14,6 +14,8 @@ import android.os.Environment;
 import android.util.Log;
 
 import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -50,18 +52,51 @@ public class HallucinationProcessor {
 	
 	// Set flag to enable processing
 	public void enableProcessing() {
-		this.hProcessingEnabled = true;
+		this.sethProcessingEnabled(true);
 	}
 
 	// Set flag to disable processing
 	public void disableProcessing() {
-		this.hProcessingEnabled = false;
+		this.sethProcessingEnabled(false);
+	}
+
+	public boolean ishProcessingEnabled() {
+		return hProcessingEnabled;
+	}
+
+	public void sethProcessingEnabled(boolean hProcessingEnabled) {
+		this.hProcessingEnabled = hProcessingEnabled;
 	}
 
 	// Set the dimensions of the image from this particular phone
 	public void setFrameSize(int width, int height) {
-		this.hFrameSizeWidth = width;
-		this.hFrameSizeHeight = height;
+		this.sethFrameSizeWidth(width);
+		this.sethFrameSizeHeight(height);
+	}
+	
+	public int gethFrameSizeWidth() {
+		return hFrameSizeWidth;
+	}
+
+	public void sethFrameSizeWidth(int hFrameSizeWidth) {
+		this.hFrameSizeWidth = hFrameSizeWidth;
+	}
+
+	public int gethFrameSizeHeight() {
+		return hFrameSizeHeight;
+	}
+
+	public void sethFrameSizeHeight(int hFrameSizeHeight) {
+		this.hFrameSizeHeight = hFrameSizeHeight;
+	}
+
+	public void setContext(Context context) {
+		hContext = context;
+	}
+
+	public void touchEvent(int x, int y) {
+		this.hTouch = new Point(x,y);
+		this.sethOnTouch(true);
 	}
 	
 	/**
@@ -86,61 +121,76 @@ public class HallucinationProcessor {
 	 * @param input
 	 * @param scale
 	 * @return
+	 * @throws IOException 
 	 */
-	public Mat hallucinate(Mat input, int scale) {
-		if(this.hProcessingEnabled && this.hOnTouch) {
-			this.hOnTouch =  false;
+	public Mat hallucinate(Mat input, int scale, int noTimes) throws IOException {
+		if(this.ishProcessingEnabled() && this.ishOnTouch()) {
+			//this.hOnTouch =  false;
 			
 			// Because of memory constraints, limit the image to a submat within the center
 			Mat inputFrame = input.submat((int)hTouch.x - (96/2), (int)hTouch.x + (96/2), (int)hTouch.y - (128/2), (int)hTouch.y + (128/2));
 			
 			// before hallucinating, apply a lanczos filter to the image to blow it up
 			Mat lanczosInput = lanczos(inputFrame,scale);
+			
+			// Save the original image, and the lanczos
+			this.saveImage(inputFrame, "Initial" + noTimes);
+			this.saveImage(lanczosInput, "LanczosAntiBlur" + noTimes);
+			
 			// Make the final image as the same size of the lanzcos'd input
 			Mat finalImage = new Mat(lanczosInput.height(),lanczosInput.width(), CvType.CV_8UC3); // or same type as well?
 			
-			Double threshold = Double.MAX_VALUE;
+			Double threshold = (double) (200 - noTimes*10);
 			
 			// Deconstruct the given LR image into its parent structures
 			List<ParentStructure> inputParentStructures = deconstructImage(lanczosInput);
 			
+			// The below comparisons for each element to each every other element
+			// takes far too long
+			
+			// Look into optimising it via an algorithm, via java data types and via setting the threshold for "GOOD ENOUGH"
+			// instead of optimising for the best. In fact, this last method may be the best as in this case we are looking at reasonably binary options.
+			
+			// Writing data to file to get an accurate threshold value
+			File root = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+			File scoreDifferenceData = new File(root, "hallucinateThresholds.txt");
+			FileWriter writer = new FileWriter(scoreDifferenceData);
+			
 			// For each ps in the low-res image
 			for(int i=0; i < inputParentStructures.size(); i++) {
 				ParentStructure currentInputPS = inputParentStructures.get(i);
-				ParentStructure matchingHR = null;
 				// For each image in the high-res library
 				for(Map.Entry<String, List<ParentStructure>> image : this.library.entrySet()) {
 					// For each parent structure in the high-res image
+					Log.i("LOOP 1", "THIS IS IN LOOP 1");
 					for(int j=0; j<image.getValue().size(); j++) {
 						ParentStructure currentHRPS = image.getValue().get(j);
-						
+						Log.i("LOOP 2", String.valueOf(image.getValue().size())+ " j= " + String.valueOf(j) + " i= " + String.valueOf(i) + 
+								" score difference: " + String.valueOf(Math.abs(currentHRPS.getWeightedScore()-currentInputPS.getWeightedScore())));
+						 
+						writer.append("i: " + String.valueOf(i) + " j: " + String.valueOf(j) + " Score Difference: " + 
+								String.valueOf(Math.abs(currentHRPS.getWeightedScore()-currentInputPS.getWeightedScore())));
+						writer.flush();
+						  
 						// If the weightedScores are within a threshold, 
 						if(Math.abs(currentHRPS.getWeightedScore()-currentInputPS.getWeightedScore())<threshold) {
 							// set this parent structure to be the current closest
 							// and make threshold this new difference
-							threshold = Math.abs(currentHRPS.getWeightedScore()-currentInputPS.getWeightedScore());
-							matchingHR = currentHRPS;
-						}
-						
-						// this will converge on the closest possible choice at the end of the image
-						if(j==image.getValue().size()-1 && matchingHR !=null) {
-							// apply the matchingHR PS
-							finalImage.put((int)Math.floor(i/lanczosInput.width()),i%lanczosInput.width(), this.originalHrImages.get(image.getKey()).get((int)matchingHR.getPixelPosition().y, (int)matchingHR.getPixelPosition().x));
+							//threshold = Math.abs(currentHRPS.getWeightedScore()-currentInputPS.getWeightedScore());
+							
+							// In a speed-updated version, have a fixed threshold and use it to break this inner loop
+							finalImage.put((int)Math.floor(i/lanczosInput.width()),i%lanczosInput.width(), 
+									this.originalHrImages.get(image.getKey()).get((int)currentHRPS.getPixelPosition().y, (int)currentHRPS.getPixelPosition().x));
+							break;
 						}
 					}
 				}
-				
-				
 			}
-			
+			writer.close();
 
-			this.saveImage(finalImage, "test");
-			
-			return input;
-			
-		} else {
-			return input;
+			this.saveImage(finalImage, "FinalImage" + noTimes);
 		}
+		return input;	
 	}
 	
 	private void saveImage(Mat img, String filename) {
@@ -438,12 +488,11 @@ public class HallucinationProcessor {
 		return result;
 	}
 
-	public void setContext(Context context) {
-		hContext = context;
+	public boolean ishOnTouch() {
+		return hOnTouch;
 	}
 
-	public void touchEvent(int x, int y) {
-		this.hTouch = new Point(x,y);
-		this.hOnTouch = true;
+	public void sethOnTouch(boolean hOnTouch) {
+		this.hOnTouch = hOnTouch;
 	}
 }

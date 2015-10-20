@@ -1,6 +1,7 @@
 package com.main.hallucinationthesis;
 
 import java.io.File;
+import java.io.IOException;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
@@ -145,6 +146,7 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
         int x = (int)event.getX() - xOffset;
         int y = (int)event.getY() - yOffset;
     	hProcess.touchEvent(x,y);
+    	
         return true;
 	}
     
@@ -158,7 +160,17 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
 
 
     public Mat onCameraFrame(Mat inputFrame) {
-    	cRgba = hProcess.hallucinate(inputFrame,2);
+    	try {
+    		int i=0;
+    		while(i<11) {
+    			cRgba = hProcess.hallucinate(inputFrame,2,i);
+    			i++;
+    		}
+    		hProcess.sethOnTouch(false);
+		} catch (IOException e) {
+			Log.d(TAG, "HallucinationProcessor IOException writing to file");
+			e.printStackTrace();
+		}
         return cRgba;
     }
 	
