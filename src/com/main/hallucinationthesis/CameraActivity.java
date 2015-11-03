@@ -10,6 +10,7 @@ import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener;
 import org.opencv.core.Mat;
+import org.opencv.highgui.Highgui;
 
 import android.app.Activity;
 import android.content.Context;
@@ -17,6 +18,7 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.os.Bundle;
+import android.os.Environment;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -161,11 +163,7 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
 
     public Mat onCameraFrame(Mat inputFrame) {
     	try {
-    		int i=0;
-    		while(i<11) {
-    			cRgba = hProcess.hallucinate(inputFrame,2,i);
-    			i++;
-    		}
+    		cRgba = hProcess.hallucinate(inputFrame,2,0);
     		hProcess.sethOnTouch(false);
 		} catch (IOException e) {
 			Log.d(TAG, "HallucinationProcessor IOException writing to file");

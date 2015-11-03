@@ -125,7 +125,6 @@ public class HallucinationProcessor {
 	 */
 	public Mat hallucinate(Mat input, int scale, int noTimes) throws IOException {
 		if(this.ishProcessingEnabled() && this.ishOnTouch()) {
-			//this.hOnTouch =  false;
 			
 			// Because of memory constraints, limit the image to a submat within the center
 			Mat inputFrame = input.submat((int)hTouch.x - (96/2), (int)hTouch.x + (96/2), (int)hTouch.y - (128/2), (int)hTouch.y + (128/2));
@@ -140,7 +139,7 @@ public class HallucinationProcessor {
 			// Make the final image as the same size of the lanzcos'd input
 			Mat finalImage = new Mat(lanczosInput.height(),lanczosInput.width(), CvType.CV_8UC3); // or same type as well?
 			
-			Double threshold = (double) (200 - noTimes*10);
+			Double threshold = (double) (100);
 			
 			// Deconstruct the given LR image into its parent structures
 			List<ParentStructure> inputParentStructures = deconstructImage(lanczosInput);
@@ -209,6 +208,8 @@ public class HallucinationProcessor {
 
 	private Mat lanczos(Mat input, int scale) {
 		
+		//input.convertTo(input, CvType.CV_8UC4);
+		
 		Mat output = new Mat(input.height()*scale, input.width()*scale, CvType.CV_8UC4);
 		Size outputSize = new Size(input.width()*scale,input.height()*scale);
 	    Imgproc.resize(input, output, outputSize,2,2,3);
@@ -239,10 +240,10 @@ public class HallucinationProcessor {
 		List<Mat> hSecondDerivativePyramid = new ArrayList<Mat>();
 		List<Mat> vSecondDerivativePyramid = new ArrayList<Mat>();
 		
-		gaussianPyramid = getGaussianPyramid(input, 3);
+		gaussianPyramid = getGaussianPyramid(input, 4, 6);
 		
 		// Each downsized image is then added
-		for(int i=0; i < 4; i++) {
+		for(int i=4; i < 6; i++) {
 			// Instantialise all of the variables
 			Mat currentGray = new Mat(); 
 			Mat currentBlur = new Mat();
@@ -251,10 +252,10 @@ public class HallucinationProcessor {
 			Mat grad2_x = new Mat();
 			Mat grad2_y = new Mat();
 			
-			Mat gaussian = gaussianPyramid.get(i).clone();
+			Mat gaussian = gaussianPyramid.get(i-4).clone();
 			
 			// The laplacian calculated from the gaussian
-			laplacianPyramid.add(getLaplacian(gaussianPyramid.get(0).clone(),i));
+			laplacianPyramid.add(getLaplacian(input.clone(),i));
 			
 			// Apply a gaussian blur before computing the horizontal and vertical derivatives
 			// using either Scharr or Sobel (preferably Scharr)
@@ -295,20 +296,20 @@ public class HallucinationProcessor {
 		Double[] weightings = {1.0,0.5,0.5,0.25,0.25};
 		
 		// For all height levels
-		for(int level = 0; level < 4; level++) {
+		for(int level = 4; level < 6; level++) {
 			// Use the gaussian as a position reference for each height level in the pyramid
-			Mat gCurrent = gaussianPyramid.get(level).clone();
+			Mat gCurrent = gaussianPyramid.get(level-4).clone();
 			for(int k = 0; k < gCurrent.rows(); k++) {
 				for(int l = 0; l < gCurrent.cols(); l++) {
 					
 					List<double[]> parentFivePoints;
 					List<double[]> currentFivePoints = extractPoints(laplacianPyramid,hFirstDerivativePyramid,
-							hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(l,k), level);
-					if(level==3) {
+							hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(l,k), level-4);
+					if(level==5) {
 						parentFivePoints = new ArrayList<double[]>();
 					} else {
 						parentFivePoints = extractPoints(laplacianPyramid,hFirstDerivativePyramid,
-							hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(Math.floor(l/2),Math.floor(k/2)), level+1);
+							hSecondDerivativePyramid,vFirstDerivativePyramid,vSecondDerivativePyramid, new Point(Math.floor(l/2),Math.floor(k/2)), level-4+1);
 					}
 					ParentStructure ps = new ParentStructure(currentFivePoints, parentFivePoints, weightings, level, new Point(l,k));
 					currentStructures.add(ps);
@@ -395,14 +396,15 @@ public class HallucinationProcessor {
 		return parentPoints;
 	}
 
-	private List<Mat> getGaussianPyramid(Mat current, int height) {
+	private List<Mat> getGaussianPyramid(Mat current, int heightBeginning, int heightEnd) {
 		List<Mat> gaussianPyramid = new ArrayList<Mat>();
-		gaussianPyramid.add(current);
 		if(!current.empty()) {
 			Mat dst = new Mat();
-			for(int j=0; j < height; j++) {
+			for(int j=0; j < heightEnd; j++) {
 				Imgproc.pyrDown(current, dst, new Size( current.cols()/2, current.rows()/2 ));
-				gaussianPyramid.add(dst.clone());
+				if(j >= heightBeginning) {
+					gaussianPyramid.add(dst.clone());
+				}
 				current = dst.clone();
 			}
 		}
