@@ -24,7 +24,6 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
-import android.view.ViewGroup;
 import android.view.WindowManager;
 
 public class CameraActivity extends Activity implements CvCameraViewListener, View.OnTouchListener {
@@ -139,17 +138,21 @@ public class CameraActivity extends Activity implements CvCameraViewListener, Vi
     @Override
 	public boolean onTouchEvent(MotionEvent event) {
     	
-    	int cols = cRgba.cols();
-        int rows = cRgba.rows();
-
-        int xOffset = (cOpenCvCameraView.getWidth() - cols) / 2;
-        int yOffset = (cOpenCvCameraView.getHeight() - rows) / 2;
+    	if(cRgba != null) {
+	    	int cols = cRgba.cols();
+	        int rows = cRgba.rows();
+	
+	        int xOffset = (cOpenCvCameraView.getWidth() - cols) / 2;
+	        int yOffset = (cOpenCvCameraView.getHeight() - rows) / 2;
+	    	
+	        int x = (int)event.getX() - xOffset;
+	        int y = (int)event.getY() - yOffset;
+	    	hProcess.touchEvent(x,y);
+	    	
+	        return true;
+    	}
     	
-        int x = (int)event.getX() - xOffset;
-        int y = (int)event.getY() - yOffset;
-    	hProcess.touchEvent(x,y);
-    	
-        return true;
+    	return false;
 	}
     
     public void onCameraViewStarted(int width, int height) {
