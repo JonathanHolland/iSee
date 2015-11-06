@@ -208,11 +208,11 @@ public class HallucinationProcessor {
 
 	private Mat lanczos(Mat input, int scale) {
 		
-		//input.convertTo(input, CvType.CV_8UC4);
-		
-		Mat output = new Mat(input.height()*scale, input.width()*scale, CvType.CV_8UC4);
+		Mat output = new Mat(input.height()*scale, input.width()*scale, CvType.CV_8UC3);
 		Size outputSize = new Size(input.width()*scale,input.height()*scale);
-	    Imgproc.resize(input, output, outputSize,2,2,3);
+	    // INTER_LANCZOS4 is 4
+		// INTER_CUBIC is 2
+		Imgproc.resize(input, output, outputSize,2,2,4);
 	    
 	    input.release();
 	    
